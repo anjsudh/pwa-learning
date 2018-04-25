@@ -1,0 +1,15 @@
+{
+  "name": "pwa-complete",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "http-server -c-1"
+  },
+  "author": "Anjana S",
+  "devDependencies": {
+    "http-server": "^0.10.0"
+  },
+  "dependencies": {
+    "web-push": "^3.3.0"
+  }
+}
