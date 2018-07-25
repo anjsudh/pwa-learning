@@ -1,5 +1,7 @@
+importScripts('/src/js/constants.js');
 importScripts('/src/js/idb.js');
-importScripts('/src/js/utility.js');
+importScripts('/src/js/indexed-db.js');
+importScripts('/src/js/notifications.js');
 
 var CACHE_STATIC_NAME = 'static-v51';
 var CACHE_DYNAMIC_NAME = 'dynamic-v3';
@@ -7,13 +9,18 @@ var STATIC_FILES = [
   '/',
   '/index.html',
   '/offline.html',
-  '/src/js/app.js',
-  '/src/js/utility.js',
+  '/src/js/constants.js',
   '/src/js/feed.js',
-  '/src/js/idb.js',
-  '/src/js/promise.js',
   '/src/js/fetch.js',
+  '/src/js/idb.js',
+  '/src/js/include-html.js',
+  '/src/js/index.js',
+  '/src/js/indexed-db.js',
+  '/src/js/location.js',
   '/src/js/material.min.js',
+  '/src/js/media.js',
+  '/src/js/notifications.js',
+  '/src/js/promise.js',
   '/src/css/app.css',
   '/src/css/feed.css',
   'https://fonts.googleapis.com/css?family=Roboto:400,700',
@@ -51,17 +58,15 @@ self.addEventListener('activate', function (event) {
 function isInArray(string, array) {
   var cachePath;
   if (string.indexOf(self.origin) === 0) { // request targets domain where we serve the page from (i.e. NOT a CDN)
-    console.log('matched ', string);
     cachePath = string.substring(self.origin.length); // take the part of the URL AFTER the domain (e.g. after localhost:8080)
   } else {
     cachePath = string; // store the full request (for CDNs)
   }
   return array.indexOf(cachePath) > -1;
 }
-
+console.log("hmm")
 self.addEventListener('fetch', function (event) {
-  var url = 'https://push-notifications-anj.firebaseio.com/posts';
-  if (event.request.url.indexOf(url) > -1) {
+  if (event.request.url.indexOf(urls.GET_ALL_POSTS) > -1) {
     event.respondWith(fetch(event.request)
       .then(function (res) {
         var clonedRes = res.clone();
@@ -96,7 +101,7 @@ self.addEventListener('fetch', function (event) {
                     return res;
                   })
               })
-              .catch(function (err) {
+              .catch(() => {
                 return caches.open(CACHE_STATIC_NAME)
                   .then(function (cache) {
                     if (event.request.headers.get('accept').includes('text/html')) {
@@ -109,47 +114,44 @@ self.addEventListener('fetch', function (event) {
     );
   }
 });
+console.log("hmm")
 //Background Sync
-self.addEventListener('sync', function(event) {
+self.addEventListener('sync', function (event) {
   console.log('[Service Worker] Background syncing', event);
   if (event.tag === 'sync-new-posts') {
     console.log('[Service Worker] Syncing new Posts');
     event.waitUntil(
       readAllData('sync-posts')
-        .then(function(data) {
-          for (var dt of data) {
-            var postData = new FormData();
+        .then(function (data) {
+          for (let dt of data) {
+            let postData = new FormData();
             postData.append('id', dt.id);
             postData.append('title', dt.title);
             postData.append('location', dt.location);
             postData.append('rawLocationLat', dt.rawLocation.lat);
             postData.append('rawLocationLng', dt.rawLocation.lng);
             postData.append('file', dt.picture, dt.id + '.png');
-
-            fetch('https://us-central1-push-notifications-anj.cloudfunctions.net/storePostData', {
+            fetch(urls.ADD_POST, {
               method: 'POST',
               body: postData
+            }).then(function (res) {
+              if (res.ok) {
+                res.json()
+                  .then(function (resData) {
+                    deleteItemFromData('sync-posts', resData.id);
+                  });
+              }
             })
-              .then(function(res) {
-                console.log('Sent data', res);
-                if (res.ok) {
-                  res.json()
-                    .then(function(resData) {
-                      deleteItemFromData('sync-posts', resData.id);
-                    });
-                }
-              })
-              .catch(function(err) {
-                console.log('Error while sending data', err);
-              });
+              .catch((err) => console.log('Error while sending data', err));
           }
 
         })
     );
   }
 });
+
 //Push Notifications
-self.addEventListener('notificationclick', function(event) {
+self.addEventListener('notificationclick', function (event) {
   var notification = event.notification;
   var action = event.action;
 
@@ -162,8 +164,8 @@ self.addEventListener('notificationclick', function(event) {
     console.log(action);
     event.waitUntil(
       clients.matchAll()
-        .then(function(clis) {
-          var client = clis.find(function(c) {
+        .then(function (clis) {
+          var client = clis.find(function (c) {
             return c.visibilityState === 'visible';
           });
 
@@ -179,11 +181,11 @@ self.addEventListener('notificationclick', function(event) {
   }
 });
 
-self.addEventListener('notificationclose', function(event) {
+self.addEventListener('notificationclose', function (event) {
   console.log('Notification was closed', event);
 });
 
-self.addEventListener('push', function(event) {
+self.addEventListener('push', function (event) {
   console.log('Push Notification received', event);
 
   var data = {title: 'New!', content: 'Something new happened!', openUrl: '/'};

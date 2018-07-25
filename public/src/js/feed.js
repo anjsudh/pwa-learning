@@ -1,117 +1,60 @@
-var shareImageButton = document.querySelector('#share-image-button');
 var createPostArea = document.querySelector('#create-post');
-var closeCreatePostModalButton = document.querySelector('#close-create-post-modal-btn');
 var sharedMomentsArea = document.querySelector('#shared-moments');
 var form = document.querySelector('form');
 var titleInput = document.querySelector('#title');
+let locationBtn = document.querySelector('#location-btn');
+let locationLoader = document.querySelector('#location-loader');
+let fetchedLocation = {lat: 0, lng: 0};
 var locationInput = document.querySelector('#location');
-var videoPlayer = document.querySelector('#player');
-var canvasElement = document.querySelector('#canvas');
-var captureButton = document.querySelector('#capture-btn');
-var imagePicker = document.querySelector('#image-picker');
-var imagePickerArea = document.querySelector('#pick-image');
-var picture;
-var locationBtn = document.querySelector('#location-btn');
-var locationLoader = document.querySelector('#location-loader');
-var fetchedLocation = {lat: 0, lng: 0};
 
 locationBtn.addEventListener('click', function (event) {
-  if (!('geolocation' in navigator)) {
+  if (!(canGetLocation())) {
     return;
   }
   var sawAlert = false;
-
   locationBtn.style.display = 'none';
   locationLoader.style.display = 'block';
-  navigator.geolocation.getCurrentPosition(function (position) {
+  fetchLocation((position) => {
     locationBtn.style.display = 'inline';
     locationLoader.style.display = 'none';
-    fetchedLocation = {lat: position.coords.latitude, lng: position.coords.longitude,};
-    locationInput.value = position.coords.latitude+" "+ position.coords.longitude;
+    locationInput.value = position.lat + " " + position.lng;
+    fetchedLocation = position;
     document.querySelector('#manual-location').classList.add('is-focused');
-  }, function (err) {
-    console.log(err);
+  }, (position) => {
     locationBtn.style.display = 'inline';
     locationLoader.style.display = 'none';
     if (!sawAlert) {
       alert('Couldn\'t fetch location, please enter manually!');
       sawAlert = true;
     }
-    fetchedLocation = {lat: 0, lng: 0};
-  }, {timeout: 7000});
-});
-
-function initializeLocation() {
-  if (!('geolocation' in navigator)) {
-    locationBtn.style.display = 'none';
-  }
-}
-
-function initializeMedia() {
-  if (!('mediaDevices' in navigator)) {
-    navigator.mediaDevices = {};
-  }
-
-  if (!('getUserMedia' in navigator.mediaDevices)) {
-    navigator.mediaDevices.getUserMedia = function (constraints) {
-      var getUserMedia = navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
-
-      if (!getUserMedia) {
-        return Promise.reject(new Error('getUserMedia is not implemented!'));
-      }
-
-      return new Promise(function (resolve, reject) {
-        getUserMedia.call(navigator, constraints, resolve, reject);
-      });
-    }
-  }
-
-  navigator.mediaDevices.getUserMedia({video: true})
-    .then(function (stream) {
-      videoPlayer.srcObject = stream;
-      videoPlayer.style.display = 'block';
-    })
-    .catch(function (err) {
-      imagePickerArea.style.display = 'block';
-    });
-}
-
-captureButton.addEventListener('click', function (event) {
-  canvasElement.style.display = 'block';
-  videoPlayer.style.display = 'none';
-  captureButton.style.display = 'none';
-  var context = canvasElement.getContext('2d');
-  context.drawImage(videoPlayer, 0, 0, canvas.width, videoPlayer.videoHeight / (videoPlayer.videoWidth / canvas.width));
-  videoPlayer.srcObject.getVideoTracks().forEach(function (track) {
-    track.stop();
+    fetchedLocation = position;
   });
-  picture = dataURItoBlob(canvasElement.toDataURL());
 });
 
-imagePicker.addEventListener('change', function (event) {
-  picture = event.target.files[0];
-});
+function promptToAddAppIconToHomeScreen(handle) {
+  handle.prompt();
+  handle.userChoice.then(function (choiceResult) {
+    console.log(choiceResult.outcome);
+    if (choiceResult.outcome === 'dismissed') {
+      console.log('User cancelled installation');
+    } else {
+      console.log('User added to home screen');
+    }
+  });
+  handle = null;
+  return handle;
+}
 
 function openCreatePostModal() {
   setTimeout(function () {
     createPostArea.style.transform = 'translateY(0)';
   }, 1);
   initializeMedia();
-  initializeLocation();
-
+  if (!(canGetLocation())) {
+    locationBtn.style.display = 'none';
+  }
   if (deferredPrompt) {
-    deferredPrompt.prompt();
-    deferredPrompt.userChoice.then(function (choiceResult) {
-      console.log(choiceResult.outcome);
-
-      if (choiceResult.outcome === 'dismissed') {
-        console.log('User cancelled installation');
-      } else {
-        console.log('User added to home screen');
-      }
-    });
-
-    deferredPrompt = null;
+    deferredPrompt = promptToAddAppIconToHomeScreen(deferredPrompt);
   }
 }
 
@@ -122,19 +65,11 @@ function closeCreatePostModal() {
   locationBtn.style.display = 'inline';
   locationLoader.style.display = 'none';
   captureButton.style.display = 'inline';
-  if (videoPlayer.srcObject) {
-    videoPlayer.srcObject.getVideoTracks().forEach(function (track) {
-      track.stop();
-    });
-  }
+  stopVideoPlayer();
   setTimeout(function () {
     createPostArea.style.transform = 'translateY(100vh)';
   }, 1);
 }
-
-shareImageButton.addEventListener('click', openCreatePostModal);
-
-closeCreatePostModalButton.addEventListener('click', closeCreatePostModal);
 
 function clearCards() {
   while (sharedMomentsArea.hasChildNodes()) {
@@ -142,10 +77,10 @@ function clearCards() {
   }
 }
 
-function createCard(data) {
-  var cardWrapper = document.createElement('div');
+function renderCard(data) {
+  let cardWrapper = document.createElement('div');
   cardWrapper.className = 'shared-moment-card mdl-card mdl-shadow--2dp';
-  var cardTitle = document.createElement('div');
+  let cardTitle = document.createElement('div');
   cardTitle.className = 'mdl-card__title';
   cardTitle.style.backgroundImage = 'url(' + data.image + ')';
   cardTitle.style.backgroundSize = 'cover';
@@ -166,23 +101,18 @@ function createCard(data) {
 
 function updateUI(data) {
   clearCards();
-  for (var i = 0; i < data.length; i++) {
-    createCard(data[i]);
+    for (var i = 0; i < data.length; i++) {
+    renderCard(data[i]);
   }
 }
 
-var url = 'https://push-notifications-anj.firebaseio.com/posts.json';
-var networkDataReceived = false;
-
-fetch(url)
-  .then(function (res) {
-    return res.json();
-  })
-  .then(function (data) {
+let networkDataReceived = false;
+fetch(urls.GET_ALL_POSTS)
+  .then((res) => res.json())
+  .then((data) => {
     networkDataReceived = true;
-    console.log('From web', data);
-    var dataArray = [];
-    for (var key in data) {
+    let dataArray = [];
+    for (let key in data) {
       dataArray.push(data[key]);
     }
     updateUI(dataArray);
@@ -192,7 +122,6 @@ if ('indexedDB' in window) {
   readAllData('posts')
     .then(function (data) {
       if (!networkDataReceived) {
-        console.log('From cache', data);
         updateUI(data);
       }
     });
@@ -218,39 +147,45 @@ function sendData() {
     })
 }
 
-form.addEventListener('submit', function (event) {
-  event.preventDefault();
-
+function validateFormInput() {
   if (titleInput.value.trim() === '' || locationInput.value.trim() === '') {
     alert('Please enter valid data!');
+    return false;
+  }
+  return true;
+}
+
+function sendDataInBackground() {
+  navigator.serviceWorker.ready
+    .then(function (sw) {
+      let post = {
+        id: new Date().toISOString(),
+        title: titleInput.value,
+        location: locationInput.value,
+        picture: picture,
+        rawLocation: fetchedLocation
+      };
+      writeData('sync-posts', post)
+        .then(() => {return sw.sync.register('sync-new-posts');})
+        .then(() => showWillSendPostDataInBackgroundToast())
+        .catch((err) => console.log(err));
+    });
+}
+
+function showWillSendPostDataInBackgroundToast() {
+  var snackbarContainer = document.querySelector('#confirmation-toast');
+  var data = {message: 'Your Post was saved for syncing!'};
+  snackbarContainer.MaterialSnackbar.showSnackbar(data);
+}
+
+form.addEventListener('submit', function (event) {
+  event.preventDefault();
+  if (validateFormInput() === false) {
     return;
   }
-
   closeCreatePostModal();
-
   if ('serviceWorker' in navigator && 'SyncManager' in window) {
-    navigator.serviceWorker.ready
-      .then(function (sw) {
-        var post = {
-          id: new Date().toISOString(),
-          title: titleInput.value,
-          location: locationInput.value,
-          picture: picture,
-          rawLocation: fetchedLocation
-        };
-        writeData('sync-posts', post)
-          .then(function () {
-            return sw.sync.register('sync-new-posts');
-          })
-          .then(function () {
-            var snackbarContainer = document.querySelector('#confirmation-toast');
-            var data = {message: 'Your Post was saved for syncing!'};
-            snackbarContainer.MaterialSnackbar.showSnackbar(data);
-          })
-          .catch(function (err) {
-            console.log(err);
-          });
-      });
+    sendDataInBackground();
   } else {
     sendData();
   }

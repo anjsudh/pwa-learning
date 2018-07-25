@@ -105,7 +105,7 @@ exports.storePostData = functions.https.onRequest(function(request, response) {
                       JSON.stringify({
                         title: "New Post",
                         content: "New Post added!",
-                        openUrl: "/help"
+                        openUrl: "/"
                       })
                     )
                     .catch(function(err) {
